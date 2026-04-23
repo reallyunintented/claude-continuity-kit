@@ -81,6 +81,16 @@ rm -rf ~/.claude/skills/writing-memory ~/.claude/hooks/memory-guard.sh
 
 Remove the `hooks` key from `~/.claude/settings.json` (or remove the `PreToolUse` entry that points to `memory-guard.sh` if you have other hooks). Delete the appended bullet in `~/.claude/CLAUDE.md`. Each lever is independent — removing one doesn't break the others.
 
+## Notes & caveats
+
+- **It's a ratchet, not a solve.** Even with all three levers in place, Claude can still drift from the rules. The point is to make the default behavior better and make drift visible earlier, not to prevent every failure. Read the transcript; the hook's stderr reminder is only useful if you (or Claude) notice it.
+- **Hook schema assumption.** The hook reads `tool_input.file_path` from the JSON Claude Code sends to `PreToolUse` hooks. If a future Claude Code version changes that schema, the hook silently stops matching — it emits nothing, no false positives, just quiet. If the kit starts feeling less effective after a Claude Code update, run `./test.sh` first, then inspect what Claude Code actually sends to hooks.
+- **Skill visibility.** Skills are listed in the "available skills" system-reminder. If you install mid-session and `writing-memory` doesn't appear, restart Claude Code.
+- **Privacy.** The hook reads only the `file_path` field from tool inputs — never file contents, never stdin text, never anything else. Nothing is logged to disk, uploaded, or sent over the network.
+- **Non-blocking by design.** If you want blocking behavior (reject the tool call unless verification is announced), change `exit 0` to `exit 2` in `memory-guard.sh` and the stderr output becomes the block reason. That will interrupt Claude mid-reasoning and is less friendly; start non-blocking and only escalate if drift persists.
+- **Co-existing hooks.** If you already have `PreToolUse` hooks configured, merge the `Write|Edit` matcher into your existing array rather than replacing it — Claude Code runs all matching hooks in order.
+- **Hook overhead.** The matcher fires on every `Write` and `Edit` (not just memory writes), and the script spawns a shell + jq each time. Budget ~5–20 ms per tool call. Imperceptible for interactive use, potentially measurable in batch edit loops.
+
 ## How this came to be
 
 This kit was built during a live debugging session where Claude repeatedly drifted from its own auto-memory discipline. It carried forward a stale project description (confused one DeFi project's identity for another's for several turns), duplicated architecture details into memory that already lived in the repo's own `CLAUDE.md`, and added a deprecated project as active because the directory still existed — even after being told otherwise.
