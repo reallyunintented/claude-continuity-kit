@@ -13,6 +13,11 @@
         "hooks": [
           { "type": "command", "command": "$HOME/.claude/hooks/session-reminder.sh" }
         ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "$HOME/.claude/hooks/handoff-surface.sh" }
+        ]
       }
     ]
   }

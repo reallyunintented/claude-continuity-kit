@@ -2,7 +2,7 @@
 # session-reminder: fires at SessionStart, prints a brief memory-discipline note.
 # Front-loads the rules so the first reminder isn't mid-action.
 #
-# Part of claude-memory-kit — https://github.com/reallyunintented/claude-memory-kit
+# Part of claude-continuity-kit — https://github.com/reallyunintented/claude-continuity-kit
 
 cat >&2 <<'EOF'
 [memory-kit] Auto-memory discipline active.

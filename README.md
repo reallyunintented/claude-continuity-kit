@@ -1,65 +1,97 @@
-# claude-memory-kit
+# claude-continuity-kit
 
-Three small levers to stop Claude Code's auto-memory from drifting into stale, wordy, or unverified claims. Non-blocking, advisory, frictionless.
+Small levers for Claude Code **session continuity** — two independent halves, each a set of mutually reinforcing skills, hooks, and rules:
+
+- **Memory half** — stops Claude's auto-memory from drifting into stale, wordy, or unverified claims.
+- **Handoff half** — makes sessions close cleanly so the next one resumes without re-deriving context.
+
+Non-blocking, advisory, frictionless. Each lever is independent. Install both halves, one half, or any subset.
+
+> Previously this repo was `claude-memory-kit`. It grew to cover handoffs too and was renamed. GitHub redirects the old URL.
 
 ## The problem
 
-Claude Code's auto-memory (files under `~/.claude/projects/<project>/memory/`) accumulates across sessions so that future Claudes aren't cold-starting every time. That's the value. The failure mode is drift:
+Sessions don't carry state the way coworkers do. Two failure modes in particular:
 
-- Descriptions go stale (project X gets rewritten but the memory still describes the old version).
-- Memory duplicates what already lives in a repo's own `CLAUDE.md` and then falls out of sync.
-- Deprecated projects get re-added as active because the directory still exists on disk.
-- Claude carries forward an old memory claim for several turns without checking whether it's still true.
+**Memory drift.** Claude Code's auto-memory (files under `~/.claude/projects/<project>/memory/`) is there so future sessions aren't cold-starting. The failure mode is drift — descriptions go stale, memory duplicates what already lives in a repo's own `CLAUDE.md` and falls out of sync, deprecated projects get re-added as active, Claude carries forward an old memory claim for several turns without re-checking. Prose rules in `CLAUDE.md` alone don't catch this.
 
-Prose rules in `CLAUDE.md` alone don't catch this. They're instructions, not enforcement, and Claude routinely drifts from its own documented rules.
+**Handoff gaps.** A session ends for reasons that aren't always "we finished the work" — a decision was made and you're now waiting on external feedback, you hit a blocker, the context window filled up. When the next session opens, Claude has no idea. It may re-litigate decisions you already made, re-brainstorm options you already rejected, or execute a plan that was explicitly gated on feedback you're still waiting for.
+
+Both are *continuity* problems — state not surviving the gap between sessions. This kit adds machine-checkable backstops so the gap stays small.
 
 ## What's in the kit
 
-Three mutually reinforcing levers:
+### Memory half
 
-1. **Shortcut rule** (`claude-md.snippet.md`) — The phrase `verify first` or `source please` at the start of a turn becomes a documented override: Claude is instructed to re-read the authoritative source before answering, not respond from memory or assumption. User-side kill-switch.
+1. **Shortcut rule** (`claude-md.snippet.md`, §1-2) — `verify first` / `source please` at the start of a turn becomes a documented override: Claude is instructed to re-read the authoritative source before answering. User-side kill-switch.
+2. **Skill** (`skills/writing-memory/SKILL.md`) — structured checklist Claude walks before writing or asserting from memory.
+3. **Hook — `hooks/memory-guard.sh`** (PreToolUse) — fires on any `Write`/`Edit` to `~/.claude/projects/*/memory/`, emits the checklist to stderr.
+4. **Hook — `hooks/session-reminder.sh`** (SessionStart) — front-loads memory discipline at the start of every session.
+5. **Optional — `/verify` slash command** (`commands/verify.md`) — shorter alternative to typing `verify first`.
 
-2. **Skill** (`skills/writing-memory/SKILL.md`) — A structured checklist Claude is instructed to walk before writing or asserting from memory. Claude Code skills get announced when invoked, which makes the reasoning visible.
+### Handoff half
 
-3. **Hooks** — Two non-blocking hooks that the harness runs (not Claude), so they fire regardless of whether Claude remembered to invoke the skill:
-   - `hooks/memory-guard.sh` — `PreToolUse` hook. Fires on any `Write`/`Edit` whose `file_path` is under `~/.claude/projects/*/memory/`. Emits the checklist to stderr.
-   - `hooks/session-reminder.sh` — `SessionStart` hook. Prints a brief discipline reminder when a new session begins, so the rules are present in context from turn one instead of only after the first memory write.
+6. **Behavior rule** (`claude-md.snippet.md`, §3) — defines *when* Claude should write a handoff without being asked (trigger phrases, close-points, wait-states) and *what* the handoff must contain.
+7. **Skill** (`skills/writing-handoff/SKILL.md`) — structured format for the handoff file itself so it's execution-oriented and resumes cleanly.
+8. **Hook — `hooks/handoff-surface.sh`** (SessionStart) — finds the most recent `~/.claude/plans/handoff-*.md` and, if fresh (< 14 days by default), emits it as additional context at the start of the next session.
+9. **Optional — `/handoff` slash command** (`commands/handoff.md`) — manual trigger for writing a handoff at an unambiguous close-point.
 
-4. **Optional — `/verify` slash command** (`commands/verify.md`) — A shorter variant of the shortcut. Drop into `~/.claude/commands/verify.md` and type `/verify` instead of `verify first` at the start of a turn. Same effect.
-
-Each lever is independent. Using all of them gives defence in depth: the hooks are the ratchet, the skill is the structured reasoning, the shortcut (and `/verify`) is your manual override.
+Each lever is independent. Using both halves together gives defence in depth: hooks are the ratchet (harness-enforced), skills are the structured reasoning, rules and slash commands are your manual overrides.
 
 ## Install
 
 ### Prerequisites
 
 - [Claude Code](https://claude.com/claude-code) installed.
-- `jq` (used by the hook). Debian/Ubuntu: `sudo apt install jq`. macOS: `brew install jq`.
+- `jq` (used by the memory-guard hook). Debian/Ubuntu: `sudo apt install jq`. macOS: `brew install jq`.
 - `bash` 4+.
 
 ### Option A — one-shot script
 
 ```bash
-git clone https://github.com/reallyunintented/claude-memory-kit.git
-cd claude-memory-kit
+git clone https://github.com/reallyunintented/claude-continuity-kit.git
+cd claude-continuity-kit
 ./install.sh
 ```
 
-The script copies the skill and hook into `~/.claude/`, then **prints** the `settings.json` and `CLAUDE.md` snippets for you to merge manually. It does not auto-edit those files because they're personal and likely contain other things.
+The script copies skills, hooks, and slash commands into `~/.claude/`, then **prints** the `settings.json` and `CLAUDE.md` snippets for you to merge manually. It does not auto-edit those files because they're personal and likely contain other things.
 
-### Option B — manual
+### Option B — manual, full install
 
 ```bash
-mkdir -p ~/.claude/skills/writing-memory ~/.claude/hooks
-cp skills/writing-memory/SKILL.md ~/.claude/skills/writing-memory/
-cp hooks/memory-guard.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/memory-guard.sh
+mkdir -p ~/.claude/skills/writing-memory ~/.claude/skills/writing-handoff \
+         ~/.claude/hooks ~/.claude/commands ~/.claude/plans
+cp skills/writing-memory/SKILL.md  ~/.claude/skills/writing-memory/
+cp skills/writing-handoff/SKILL.md ~/.claude/skills/writing-handoff/
+cp hooks/memory-guard.sh hooks/session-reminder.sh hooks/handoff-surface.sh ~/.claude/hooks/
+cp commands/verify.md commands/handoff.md ~/.claude/commands/
+chmod +x ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh
 ```
 
-Then:
+### Option C — manual, half install
 
-1. Merge `settings.snippet.json` into `~/.claude/settings.json`. If your settings file doesn't already have a `hooks` key, add the full block. If it does, merge the `PreToolUse` entry into the existing array. Replace `$HOME` in the command path with your actual home path if your Claude Code version doesn't expand environment variables in hook commands — absolute paths are safest.
-2. Append `claude-md.snippet.md` content to `~/.claude/CLAUDE.md`.
+Install only memory or only handoff — each half's files are independent.
+
+**Memory only:**
+```bash
+cp skills/writing-memory/SKILL.md ~/.claude/skills/writing-memory/
+cp hooks/memory-guard.sh hooks/session-reminder.sh ~/.claude/hooks/
+cp commands/verify.md ~/.claude/commands/
+chmod +x ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh
+```
+
+**Handoff only:**
+```bash
+cp skills/writing-handoff/SKILL.md ~/.claude/skills/writing-handoff/
+cp hooks/handoff-surface.sh ~/.claude/hooks/
+cp commands/handoff.md ~/.claude/commands/
+chmod +x ~/.claude/hooks/handoff-surface.sh
+```
+
+Then in all cases:
+
+1. Merge the relevant pieces of `settings.snippet.json` into `~/.claude/settings.json`. If your settings file already has a `hooks` key, merge the entries into the existing arrays. Replace `$HOME` with your actual home path if your Claude Code version doesn't expand environment variables in hook commands.
+2. Append the relevant sections from `claude-md.snippet.md` to `~/.claude/CLAUDE.md`.
 
 ## Verify
 
@@ -69,39 +101,48 @@ Run the included test:
 ./test.sh
 ```
 
-Four scenarios should pass: hook emits a checklist when the path is under auto-memory, stays silent otherwise, doesn't crash on malformed JSON, doesn't crash on empty input.
+Ten scenarios should pass: memory hook emits on auto-memory paths and stays silent otherwise, doesn't crash on malformed JSON or empty input, session-reminder emits at SessionStart, handoff-surface surfaces fresh handoffs and stays silent for missing/empty/stale/irrelevant conditions.
 
 End-to-end in a Claude Code session:
 
-- The new `writing-memory` skill should appear in the session's available skills list.
-- Ask Claude to update anything in `~/.claude/projects/<project>/memory/`. The `[memory-guard]` checklist should appear in the transcript before the write.
-- At the start of any turn, type `verify first` — Claude should re-read the relevant source file instead of answering from memory.
+- Both new skills should appear in the session's available skills list (`writing-memory`, `writing-handoff`).
+- Start a session: the `[memory-kit]` and `[handoff-kit]` banners should appear as SessionStart context (handoff banner only if a fresh handoff file exists).
+- Ask Claude to update anything under `~/.claude/projects/<project>/memory/`: the `[memory-guard]` checklist should appear before the write.
+- Type `verify first` at the start of a turn: Claude should re-read the relevant source file instead of answering from memory.
+- Type `/handoff` at a close-point: Claude should write a handoff file to `~/.claude/plans/handoff-YYYY-MM-DD-<topic>.md`.
+- Start a new session: the handoff should be surfaced as additional context.
 
 ## Uninstall
 
+Full:
 ```bash
-rm -rf ~/.claude/skills/writing-memory ~/.claude/hooks/memory-guard.sh
+rm -rf ~/.claude/skills/writing-memory ~/.claude/skills/writing-handoff
+rm -f  ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh
+rm -f  ~/.claude/commands/verify.md ~/.claude/commands/handoff.md
 ```
 
-Remove the `hooks` key from `~/.claude/settings.json` (or remove the `PreToolUse` entry that points to `memory-guard.sh` if you have other hooks). Delete the appended bullet in `~/.claude/CLAUDE.md`. Each lever is independent — removing one doesn't break the others.
+Then remove the corresponding entries from `~/.claude/settings.json` and the corresponding sections from `~/.claude/CLAUDE.md`. Each lever is independent — remove any subset without breaking the rest.
 
 ## Notes & caveats
 
-- **It's a ratchet, not a solve.** Even with all three levers in place, Claude can still drift from the rules. The point is to make the default behavior better and make drift visible earlier, not to prevent every failure. Read the transcript; the hook's stderr reminder is only useful if you (or Claude) notice it.
-- **Hook schema assumption.** The hook reads `tool_input.file_path` from the JSON Claude Code sends to `PreToolUse` hooks. If a future Claude Code version changes that schema, the hook silently stops matching — it emits nothing, no false positives, just quiet. If the kit starts feeling less effective after a Claude Code update, run `./test.sh` first, then inspect what Claude Code actually sends to hooks.
-- **Skill visibility.** Skills are listed in the "available skills" system-reminder. If you install mid-session and `writing-memory` doesn't appear, restart Claude Code.
-- **Privacy.** The hook reads only the `file_path` field from tool inputs — never file contents, never stdin text, never anything else. Nothing is logged to disk, uploaded, or sent over the network.
-- **Non-blocking by design.** If you want blocking behavior (reject the tool call unless verification is announced), change `exit 0` to `exit 2` in `memory-guard.sh` and the stderr output becomes the block reason. That will interrupt Claude mid-reasoning and is less friendly; start non-blocking and only escalate if drift persists.
-- **Co-existing hooks.** If you already have `PreToolUse` hooks configured, merge the `Write|Edit` matcher into your existing array rather than replacing it — Claude Code runs all matching hooks in order.
-- **Hook overhead.** The matcher fires on every `Write` and `Edit` (not just memory writes), and the script spawns a shell + jq each time. Budget ~5–20 ms per tool call. Imperceptible for interactive use, potentially measurable in batch edit loops.
+- **It's a ratchet, not a solve.** Even with everything installed, Claude can still drift. The point is to make the default behavior better and make drift visible earlier, not to prevent every failure. The hook stderr reminders are only useful if someone (you or Claude) notices them.
+- **Hook schema assumption.** `memory-guard.sh` reads `tool_input.file_path` from the JSON Claude Code sends to `PreToolUse` hooks. If a future Claude Code version changes that schema, the hook silently stops matching — no false positives, just quiet. If the kit starts feeling less effective after a Claude Code update, run `./test.sh` first, then inspect what Claude Code actually sends to hooks.
+- **Handoff judgment is imperfect.** The hook surfaces handoffs when they exist; the skill structures them well when Claude decides to write one. But deciding to write one in the first place is still Claude's judgment call. Use `/handoff` or an explicit trigger phrase ("wrap up") when you want to be sure.
+- **Skill visibility.** Skills are listed in the "available skills" system-reminder. If you install mid-session and a skill doesn't appear, restart Claude Code.
+- **Privacy.** The hooks read only minimal fields (the memory-guard reads `file_path`, handoff-surface reads filenames and mtimes in your own `~/.claude/plans/`). Nothing is logged to disk, uploaded, or sent over the network.
+- **Non-blocking by design.** If you want blocking behavior (reject the tool call unless verification is announced), change `exit 0` to `exit 2` in `memory-guard.sh`. That interrupts Claude mid-reasoning and is less friendly; start non-blocking and only escalate if drift persists.
+- **Co-existing hooks.** If you already have `PreToolUse` / `SessionStart` hooks configured, merge the new entries into your existing arrays rather than replacing them — Claude Code runs all matching hooks in order.
+- **Hook overhead.** Each hook is small (jq call for memory-guard, find call for handoff-surface, bash printf for session-reminder). Budget single-digit milliseconds per invocation.
+- **Stale handoffs get suppressed.** `handoff-surface.sh` hides handoffs older than `HANDOFF_MAX_AGE_DAYS` (default 14). Override via env var. After a handoff is executed or superseded, delete the file so it doesn't resurface.
+- **No cross-machine sync.** `~/.claude/plans/` and `~/.claude/projects/*/memory/` are local directories. If you switch machines mid-project, these don't travel by default. Sync them with your dotfiles repo if you want that.
 
 ## How this came to be
 
-This kit was built during a live debugging session where Claude repeatedly drifted from its own auto-memory discipline. It carried forward a stale project description (confused one DeFi project's identity for another's for several turns), duplicated architecture details into memory that already lived in the repo's own `CLAUDE.md`, and added a deprecated project as active because the directory still existed — even after being told otherwise.
+The memory half was built during a live debugging session where Claude repeatedly drifted from its own auto-memory discipline — carried forward a stale project description (confused one DeFi project's identity for another's for several turns), duplicated architecture details into memory that already lived in the repo's own `CLAUDE.md`, and added a deprecated project as active because the directory still existed.
 
-The user caught each drift patiently. Claude eventually named the underlying pattern — treating the presence of a file or old memory claim as ground truth instead of cross-checking against the authoritative source — and we co-designed these three levers as a self-correcting ratchet.
+The handoff half was built the next day, when a project's foundation was removed by an upstream vendor and the user had to post a public question asking what the project should become. Mid-brainstorm the user noticed the same problem in reverse — "how do we make sure the next session doesn't re-derive all of this when we resume?" — and the kit's second half fell out naturally.
 
-None of this would exist without Claude's collaboration. The skill's checklist, the hook's path-matching, the CLAUDE.md rules it backstops — all came out of a back-and-forth where Claude's own failure modes were both the subject and the co-author. This kit is as much a record of that conversation as it is a utility. Use it, fork it, make it your own.
+Both halves came out of back-and-forths where Claude's own failure modes were both the subject and the co-author. This kit is as much a record of those conversations as it is a utility. Use it, fork it, make it your own.
 
 ## License
 

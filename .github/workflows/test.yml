@@ -16,7 +16,7 @@ jobs:
         run: jq --version
 
       - name: Make scripts executable
-        run: chmod +x ./test.sh ./hooks/memory-guard.sh
+        run: chmod +x ./test.sh ./hooks/memory-guard.sh ./hooks/session-reminder.sh ./hooks/handoff-surface.sh
 
       - name: Run test suite
         run: ./test.sh

@@ -3,7 +3,7 @@
 # Reads PreToolUse JSON from stdin, inspects tool_input.file_path,
 # emits a checklist to stderr when the path is under ~/.claude/projects/*/memory/.
 #
-# Part of claude-memory-kit — https://github.com/reallyunintented/claude-memory-kit
+# Part of claude-continuity-kit — https://github.com/reallyunintented/claude-continuity-kit
 
 input=$(cat)
 path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
