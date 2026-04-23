@@ -21,9 +21,13 @@ Three mutually reinforcing levers:
 
 2. **Skill** (`skills/writing-memory/SKILL.md`) — A structured checklist Claude is instructed to walk before writing or asserting from memory. Claude Code skills get announced when invoked, which makes the reasoning visible.
 
-3. **Hook** (`hooks/memory-guard.sh`) — A non-blocking `PreToolUse` hook that fires on any `Write` or `Edit` whose `file_path` is under `~/.claude/projects/*/memory/`. Emits a checklist reminder to stderr. The harness runs it, not Claude — so it fires regardless of whether Claude remembered to invoke the skill. Mechanical backstop.
+3. **Hooks** — Two non-blocking hooks that the harness runs (not Claude), so they fire regardless of whether Claude remembered to invoke the skill:
+   - `hooks/memory-guard.sh` — `PreToolUse` hook. Fires on any `Write`/`Edit` whose `file_path` is under `~/.claude/projects/*/memory/`. Emits the checklist to stderr.
+   - `hooks/session-reminder.sh` — `SessionStart` hook. Prints a brief discipline reminder when a new session begins, so the rules are present in context from turn one instead of only after the first memory write.
 
-Each lever is independent. Using all three gives defence in depth: the hook is the ratchet, the skill is the structured reasoning, the shortcut is your manual override.
+4. **Optional — `/verify` slash command** (`commands/verify.md`) — A shorter variant of the shortcut. Drop into `~/.claude/commands/verify.md` and type `/verify` instead of `verify first` at the start of a turn. Same effect.
+
+Each lever is independent. Using all of them gives defence in depth: the hooks are the ratchet, the skill is the structured reasoning, the shortcut (and `/verify`) is your manual override.
 
 ## Install
 

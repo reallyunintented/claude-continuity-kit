@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude-memory-kit installer.
-# Copies the skill and hook into ~/.claude/ and prints snippets to merge manually.
+# Copies the skill and hooks into ~/.claude/ and prints snippets to merge manually.
 set -euo pipefail
 
 CLAUDE_DIR="${HOME}/.claude"
@@ -29,10 +29,12 @@ mkdir -p "${CLAUDE_DIR}/hooks"
 # Copy files
 cp "${HERE}/skills/writing-memory/SKILL.md" "${CLAUDE_DIR}/skills/writing-memory/"
 cp "${HERE}/hooks/memory-guard.sh" "${CLAUDE_DIR}/hooks/"
-chmod +x "${CLAUDE_DIR}/hooks/memory-guard.sh"
+cp "${HERE}/hooks/session-reminder.sh" "${CLAUDE_DIR}/hooks/"
+chmod +x "${CLAUDE_DIR}/hooks/memory-guard.sh" "${CLAUDE_DIR}/hooks/session-reminder.sh"
 
-echo "  Skill installed: ${CLAUDE_DIR}/skills/writing-memory/SKILL.md"
-echo "  Hook installed:  ${CLAUDE_DIR}/hooks/memory-guard.sh (executable)"
+echo "  Skill installed:    ${CLAUDE_DIR}/skills/writing-memory/SKILL.md"
+echo "  Hook installed:     ${CLAUDE_DIR}/hooks/memory-guard.sh (executable)"
+echo "  Hook installed:     ${CLAUDE_DIR}/hooks/session-reminder.sh (executable)"
 echo ""
 echo "---"
 echo "Two manual merge steps remaining (these files are personal, we don't auto-edit them):"
@@ -41,11 +43,19 @@ echo "STEP 1 — Merge into ${CLAUDE_DIR}/settings.json:"
 echo ""
 sed "s|\$HOME|${HOME}|g" "${HERE}/settings.snippet.json" | sed 's/^/    /'
 echo ""
-echo "  If you already have a 'hooks' key, merge the PreToolUse entry into your existing array."
+echo "  If you already have a 'hooks' key, merge the PreToolUse + SessionStart entries into your existing structure."
 echo ""
 echo "STEP 2 — Append to ${CLAUDE_DIR}/CLAUDE.md (see ${HERE}/claude-md.snippet.md for the full text):"
 echo ""
 echo "    - If the user types \`verify first\` or \`source please\` (or similar hard-verify phrasing) at the start of a turn, treat it as an override: do not answer from memory, prior context, or assumption. Re-read the authoritative source before responding. Applies to that turn only."
+echo ""
+echo "---"
+echo "OPTIONAL — /verify slash command:"
+echo ""
+echo "  mkdir -p ${CLAUDE_DIR}/commands"
+echo "  cp ${HERE}/commands/verify.md ${CLAUDE_DIR}/commands/"
+echo ""
+echo "  Then you can type '/verify' in Claude Code instead of 'verify first' for the same effect."
 echo ""
 echo "---"
 echo "Verify with: ./test.sh"
