@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "$HOME/.claude/hooks/memory-guard.sh" }
+        ]
+      }
+    ]
+  }
+}
