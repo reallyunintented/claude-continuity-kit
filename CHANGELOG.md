@@ -2,6 +2,18 @@
 
 All notable changes to claude-continuity-kit (previously claude-memory-kit). Format loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver-ish: pre-1.0, minor bumps for new features, patches for fixes.
 
+## [0.4.0] — 2026-04-24
+
+### Added
+- **`hooks/session-snapshot.sh`** — `SessionEnd` hook that automatically writes a git-state snapshot to `~/.claude/plans/handoff-YYYY-MM-DD-<branch>.md` on every session exit. Captures branch, uncommitted changes, last five commits, and plans on disk. Skips silently if a `/handoff` was written in the last 30 minutes so deliberate handoffs are never overwritten by the shallow fallback.
+- **"Using the handoff half" section in README** — documents autopilot mode (install and forget), deliberate mode (`/handoff` at close-points), hybrid mode (both), and what to do when a handoff surfaces. Clarifies what the snapshot covers and what it does not.
+- Test coverage for `session-snapshot.sh` in `test.sh` (4 new scenarios: writes on clean exit, includes git info, skips when fresh handoff exists, no stderr output). Total: 14 scenarios.
+
+### Changed
+- `settings.snippet.json` — adds `SessionEnd` hook registration for `session-snapshot.sh`.
+- `install.sh` — copies `session-snapshot.sh` and makes it executable.
+- `README.md` — install commands (Options B and C) updated to include `session-snapshot.sh`; uninstall updated; verify count updated to 14; caveats section adds snapshot-vs-handoff distinction.
+
 ## [0.3.0] — 2026-04-24
 
 ### Added
@@ -46,6 +58,7 @@ All notable changes to claude-continuity-kit (previously claude-memory-kit). For
 - `install.sh` and `test.sh`.
 - GitHub Actions CI workflow (`.github/workflows/test.yml`) running the test suite on push and PR.
 
+[0.4.0]: https://github.com/reallyunintented/claude-continuity-kit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/reallyunintented/claude-continuity-kit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/reallyunintented/claude-continuity-kit/releases/tag/v0.2.0
 [0.1]: https://github.com/reallyunintented/claude-continuity-kit/releases/tag/v0.1

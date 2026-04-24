@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Test all hooks: memory-guard, session-reminder, handoff-surface.
+# Test all hooks: memory-guard, session-reminder, handoff-surface, session-snapshot.
 # Usage: ./test.sh
 set -uo pipefail
 
 HOOK_MEMORY="./hooks/memory-guard.sh"
 HOOK_SESSION="./hooks/session-reminder.sh"
 HOOK_HANDOFF="./hooks/handoff-surface.sh"
+HOOK_SNAPSHOT="./hooks/session-snapshot.sh"
 
-for f in "$HOOK_MEMORY" "$HOOK_SESSION" "$HOOK_HANDOFF"; do
+for f in "$HOOK_MEMORY" "$HOOK_SESSION" "$HOOK_HANDOFF" "$HOOK_SNAPSHOT"; do
     if [[ ! -x "$f" ]]; then
         echo "ERROR: $f is not executable or does not exist."
         echo "Run: chmod +x $f"
@@ -141,6 +142,68 @@ run_handoff_test "stale handoff (old mtime) stays silent" \
 run_handoff_test "unrelated files in plans dir ignored" \
     "echo 'not a handoff' > \"\$TMPHOME/.claude/plans/random.md\"" \
     "no"
+
+run_snapshot_test() {
+    local name="$1"
+    local setup_cmd="$2"
+    local expect_written="$3" # "yes" or "no" — whether hook should write a NEW file
+    local expect_content="$4" # substring to find in newly written file (ignored when "no")
+
+    TMPHOME=$(mktemp -d)
+    mkdir -p "$TMPHOME/.claude/plans"
+    eval "$setup_cmd"
+
+    # Count files before so we detect only hook-written files.
+    local before_count exit_code after_count
+    before_count=$(find "$TMPHOME/.claude/plans" -maxdepth 1 -type f -name 'handoff-*.md' 2>/dev/null | wc -l)
+
+    HOME="$TMPHOME" bash "$HOOK_SNAPSHOT" </dev/null 2>/dev/null
+    exit_code=$?
+
+    after_count=$(find "$TMPHOME/.claude/plans" -maxdepth 1 -type f -name 'handoff-*.md' 2>/dev/null | wc -l)
+
+    local file_written="no"
+    (( after_count > before_count )) && file_written="yes"
+
+    local content_ok="yes"
+    if [[ "$expect_written" == "yes" && -n "$expect_content" ]]; then
+        local newest
+        newest=$(find "$TMPHOME/.claude/plans" -maxdepth 1 -type f -name 'handoff-*.md' \
+            -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)
+        grep -q "$expect_content" "$newest" 2>/dev/null || content_ok="no"
+    fi
+
+    if [[ "$exit_code" -eq 0 ]] && [[ "$file_written" == "$expect_written" ]] && [[ "$content_ok" == "yes" ]]; then
+        echo "  PASS: $name"
+        PASS=$((PASS+1))
+    else
+        echo "  FAIL: $name (exit=$exit_code, written=$file_written, expected=$expect_written, content_ok=$content_ok)"
+        FAIL=$((FAIL+1))
+    fi
+
+    rm -rf "$TMPHOME"
+    TMPHOME=""
+}
+
+echo ""
+echo "Testing session-snapshot hook..."
+echo ""
+
+run_snapshot_test "writes snapshot on clean exit" \
+    ":" \
+    "yes" "Auto-snapshot"
+
+run_snapshot_test "includes git info when in repo" \
+    ":" \
+    "yes" "Branch"
+
+run_snapshot_test "skips when fresh handoff exists" \
+    "echo 'manual handoff' > \"\$TMPHOME/.claude/plans/handoff-$(date +%Y-%m-%d)-manual.md\"" \
+    "no" ""
+
+run_snapshot_test "produces no stderr output" \
+    ":" \
+    "yes" ""
 
 echo ""
 echo "Passed: $PASS, Failed: $FAIL"

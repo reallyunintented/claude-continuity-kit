@@ -39,8 +39,9 @@ chmod +x "${CLAUDE_DIR}/hooks/memory-guard.sh" "${CLAUDE_DIR}/hooks/session-remi
 # Handoff kit
 cp "${HERE}/skills/writing-handoff/SKILL.md" "${CLAUDE_DIR}/skills/writing-handoff/"
 cp "${HERE}/hooks/handoff-surface.sh"        "${CLAUDE_DIR}/hooks/"
+cp "${HERE}/hooks/session-snapshot.sh"       "${CLAUDE_DIR}/hooks/"
 cp "${HERE}/commands/handoff.md"             "${CLAUDE_DIR}/commands/"
-chmod +x "${CLAUDE_DIR}/hooks/handoff-surface.sh"
+chmod +x "${CLAUDE_DIR}/hooks/handoff-surface.sh" "${CLAUDE_DIR}/hooks/session-snapshot.sh"
 
 echo "  Memory kit:"
 echo "    skill:    ${CLAUDE_DIR}/skills/writing-memory/SKILL.md"
@@ -51,6 +52,7 @@ echo ""
 echo "  Handoff kit:"
 echo "    skill:    ${CLAUDE_DIR}/skills/writing-handoff/SKILL.md"
 echo "    hook:     ${CLAUDE_DIR}/hooks/handoff-surface.sh"
+echo "    hook:     ${CLAUDE_DIR}/hooks/session-snapshot.sh"
 echo "    command:  ${CLAUDE_DIR}/commands/handoff.md  (type /handoff)"
 echo ""
 echo "  Plans dir ensured: ${CLAUDE_DIR}/plans/"

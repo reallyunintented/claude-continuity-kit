@@ -34,7 +34,8 @@ Both are *continuity* problems — state not surviving the gap between sessions.
 6. **Behavior rule** (`claude-md.snippet.md`, §3) — defines *when* Claude should write a handoff without being asked (trigger phrases, close-points, wait-states) and *what* the handoff must contain.
 7. **Skill** (`skills/writing-handoff/SKILL.md`) — structured format for the handoff file itself so it's execution-oriented and resumes cleanly.
 8. **Hook — `hooks/handoff-surface.sh`** (SessionStart) — finds the most recent `~/.claude/plans/handoff-*.md` and, if fresh (< 14 days by default), emits it as additional context at the start of the next session.
-9. **Optional — `/handoff` slash command** (`commands/handoff.md`) — manual trigger for writing a handoff at an unambiguous close-point.
+9. **Hook — `hooks/session-snapshot.sh`** (SessionEnd) — automatically writes a git-state snapshot when the session exits. Captures branch, uncommitted changes, last five commits, and plans on disk. Skips silently if a `/handoff` was already written in the last 30 minutes.
+10. **Optional — `/handoff` slash command** (`commands/handoff.md`) — manual trigger for writing a handoff at an unambiguous close-point.
 
 Each lever is independent. Using both halves together gives defence in depth: hooks are the ratchet (harness-enforced), skills are the structured reasoning, rules and slash commands are your manual overrides.
 
@@ -63,9 +64,9 @@ mkdir -p ~/.claude/skills/writing-memory ~/.claude/skills/writing-handoff \
          ~/.claude/hooks ~/.claude/commands ~/.claude/plans
 cp skills/writing-memory/SKILL.md  ~/.claude/skills/writing-memory/
 cp skills/writing-handoff/SKILL.md ~/.claude/skills/writing-handoff/
-cp hooks/memory-guard.sh hooks/session-reminder.sh hooks/handoff-surface.sh ~/.claude/hooks/
+cp hooks/memory-guard.sh hooks/session-reminder.sh hooks/handoff-surface.sh hooks/session-snapshot.sh ~/.claude/hooks/
 cp commands/verify.md commands/handoff.md ~/.claude/commands/
-chmod +x ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh
+chmod +x ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh ~/.claude/hooks/session-snapshot.sh
 ```
 
 ### Option C — manual, half install
@@ -83,9 +84,9 @@ chmod +x ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh
 **Handoff only:**
 ```bash
 cp skills/writing-handoff/SKILL.md ~/.claude/skills/writing-handoff/
-cp hooks/handoff-surface.sh ~/.claude/hooks/
+cp hooks/handoff-surface.sh hooks/session-snapshot.sh ~/.claude/hooks/
 cp commands/handoff.md ~/.claude/commands/
-chmod +x ~/.claude/hooks/handoff-surface.sh
+chmod +x ~/.claude/hooks/handoff-surface.sh ~/.claude/hooks/session-snapshot.sh
 ```
 
 Then in all cases:
@@ -101,7 +102,7 @@ Run the included test:
 ./test.sh
 ```
 
-Ten scenarios should pass: memory hook emits on auto-memory paths and stays silent otherwise, doesn't crash on malformed JSON or empty input, session-reminder emits at SessionStart, handoff-surface surfaces fresh handoffs and stays silent for missing/empty/stale/irrelevant conditions.
+Fourteen scenarios should pass: memory hook emits on auto-memory paths and stays silent otherwise, doesn't crash on malformed JSON or empty input, session-reminder emits at SessionStart, handoff-surface surfaces fresh handoffs and stays silent for missing/empty/stale/irrelevant conditions, session-snapshot writes a file on exit, includes git info, skips when a fresh handoff exists, and produces no stderr output.
 
 End-to-end in a Claude Code session:
 
@@ -110,14 +111,54 @@ End-to-end in a Claude Code session:
 - Ask Claude to update anything under `~/.claude/projects/<project>/memory/`: the `[memory-guard]` checklist should appear before the write.
 - Type `verify first` at the start of a turn: Claude should re-read the relevant source file instead of answering from memory.
 - Type `/handoff` at a close-point: Claude should write a handoff file to `~/.claude/plans/handoff-YYYY-MM-DD-<topic>.md`.
-- Start a new session: the handoff should be surfaced as additional context.
+- Exit the session: `session-snapshot.sh` should write a snapshot to `~/.claude/plans/`. Start a new session: the snapshot (or handoff) should be surfaced as additional context.
+
+## Using the handoff half
+
+The handoff half has three modes. You can run any one of them or combine them.
+
+### Autopilot (set and forget)
+
+Install `session-snapshot.sh` and forget it. Every time a session exits, a file like `handoff-2026-04-24-main.md` appears in `~/.claude/plans/`. The next time you start Claude Code, `handoff-surface.sh` reads it and injects its contents as additional context before your first message.
+
+You do nothing. You just get orientation.
+
+The snapshot is deliberately shallow — git branch, uncommitted changes, last five commits, and what plan files are on disk. It tells the next session *where* you were, not *why*. That's intentional: it's a fast, zero-cost fallback, not a replacement for deliberate handoffs.
+
+### Deliberate (explicit close-points)
+
+Type `/handoff` (or say "wrap up", "done for now") at any genuine close-point. Claude uses the `writing-handoff` skill to produce a reasoning-rich handoff file: what was decided, what was rejected, what the next action is, what not to do. This is the high-quality path.
+
+When you exit shortly after running `/handoff`, the `session-snapshot.sh` hook detects that a handoff was written in the last 30 minutes and skips writing a snapshot — so you always get the richer of the two.
+
+### Hybrid (recommended)
+
+Let autopilot run always. Use `/handoff` explicitly when you made a significant decision, hit a blocker, or are pausing mid-plan.
+
+Result:
+- Routine exits → snapshot, free, automatic.
+- Significant close-points → AI handoff, rich, deliberate.
+- Next session always gets *something*, and the something scales with how much you invested at close.
+
+### What to do when a handoff surfaces
+
+The `[handoff-kit]` banner at session start means a recent handoff was found. Standard operating procedure:
+
+1. **Read it before taking any action.** The surfaced file is printed in full; don't skip it.
+2. **Check if it's a snapshot or a deliberate handoff.** Snapshots say `Auto-generated by session-snapshot hook` at the top. Treat them as orientation (git state, where you were), not as a plan.
+3. **Delete or supersede it when done.** `rm ~/.claude/plans/handoff-YYYY-MM-DD-<topic>.md`. Once a handoff is executed, keeping it around causes it to resurface unnecessarily.
+4. **Override the age limit if needed.** `HANDOFF_MAX_AGE_DAYS=30 claude` — the default is 14 days; snapshots from two weeks ago are rarely useful.
+
+### What the snapshot does not cover
+
+The shell-based snapshot can only read what git and the filesystem expose. It does not know what was *discussed* in the session, what decisions were made, what options were considered and rejected, or what the emotional/strategic context was. For any of that, use `/handoff`.
 
 ## Uninstall
 
 Full:
 ```bash
 rm -rf ~/.claude/skills/writing-memory ~/.claude/skills/writing-handoff
-rm -f  ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh
+rm -f  ~/.claude/hooks/memory-guard.sh ~/.claude/hooks/session-reminder.sh ~/.claude/hooks/handoff-surface.sh ~/.claude/hooks/session-snapshot.sh
 rm -f  ~/.claude/commands/verify.md ~/.claude/commands/handoff.md
 ```
 
@@ -134,6 +175,7 @@ Then remove the corresponding entries from `~/.claude/settings.json` and the cor
 - **Co-existing hooks.** If you already have `PreToolUse` / `SessionStart` hooks configured, merge the new entries into your existing arrays rather than replacing them — Claude Code runs all matching hooks in order.
 - **Hook overhead.** Each hook is small (jq call for memory-guard, find call for handoff-surface, bash printf for session-reminder). Budget single-digit milliseconds per invocation.
 - **Stale handoffs get suppressed.** `handoff-surface.sh` hides handoffs older than `HANDOFF_MAX_AGE_DAYS` (default 14). Override via env var. After a handoff is executed or superseded, delete the file so it doesn't resurface.
+- **Snapshots are orientation, not handoffs.** `session-snapshot.sh` captures git state — branch, uncommitted changes, last five commits. It does not know what was discussed, decided, or rejected in the session. For context-rich handoffs, use `/handoff` explicitly. The two coexist: the 30-minute guard ensures a deliberate `/handoff` is never silently overwritten by a snapshot.
 - **No cross-machine sync.** `~/.claude/plans/` and `~/.claude/projects/*/memory/` are local directories. If you switch machines mid-project, these don't travel by default. Sync them with your dotfiles repo if you want that.
 
 ## How this came to be

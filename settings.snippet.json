@@ -19,6 +19,13 @@
           { "type": "command", "command": "$HOME/.claude/hooks/handoff-surface.sh" }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$HOME/.claude/hooks/session-snapshot.sh" }
+        ]
+      }
     ]
   }
 }
